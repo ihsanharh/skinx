@@ -10,7 +10,6 @@ from .cache import find_premium_cache, list_packs
 from .pack import (
     decrypt_pack,
     detect_encrypted,
-    encrypt_pack,
     encrypt_to_folder,
     extract_mcpack,
     import_pack,
@@ -231,78 +230,14 @@ def cmd_extract():
     input("\nPress Enter to continue...")
 
 
-def cmd_encrypt():
+def cmd_convert():
     while True:
         clear_screen()
-        print("=== Encrypt ===")
-        print("Lock a skin pack folder.")
-        print("Output: encrypted folder or .mcpack")
+        print("=== Convert ===")
+        print("Encrypt, decrypt, or convert any skin pack.")
         print("[B]ack to menu\n")
 
-        source = get_input("Skin pack folder path", allow_back=True)
-        if source == "BACK":
-            return
-
-        source_path = Path(source).resolve()
-        if not source_path.exists():
-            print(f"[-] Path not found: {source}")
-            input("\nPress Enter to continue...")
-            continue
-        if not (source_path / "manifest.json").exists():
-            print("[-] Not a skin pack (no manifest.json)")
-            input("\nPress Enter to continue...")
-            continue
-
-        encrypted = detect_encrypted(source_path)
-        if encrypted:
-            print("  Detected: encrypted folder")
-        else:
-            print("  Detected: unencrypted folder")
-
-        print("\nOutput format:")
-        print("  [1] Folder")
-        print("  [2] .mcpack")
-        fmt = get_input("Select", "1")
-        if fmt == "BACK":
-            return
-
-        if fmt == "2":
-            if not encrypted:
-                enc = confirm_input("Encrypt the .mcpack?", default=True)
-                if enc == "BACK":
-                    return
-            else:
-                enc = True
-        else:
-            enc = True
-
-        out = ask_output(source_path.name)
-        if out == "BACK":
-            return
-        name, out_dir = out
-
-        if fmt == "2":
-            if enc:
-                encrypt_pack(source_path, out_dir)
-            else:
-                pack_to_mcpack_raw(source_path, out_dir, name)
-        else:
-            encrypt_to_folder(source_path, out_dir / name)
-
-        input("\nPress Enter to continue...")
-        return
-
-
-def cmd_decrypt():
-    while True:
-        clear_screen()
-        print("=== Decrypt ===")
-        print("Unlock an encrypted pack.")
-        print("Input: encrypted folder or .mcpack")
-        print("Output: open folder or .mcpack")
-        print("[B]ack to menu\n")
-
-        source = get_input("Encrypted pack path (folder or .mcpack)", allow_back=True)
+        source = get_input("Skin pack path (folder or .mcpack)", allow_back=True)
         if source == "BACK":
             return
 
@@ -316,50 +251,64 @@ def cmd_decrypt():
 
         if is_mcpack:
             print("  Detected: .mcpack file")
-            temp_dir = Path(tempfile.mkdtemp())
-            extract_mcpack(source_path, temp_dir)
-            source_path = temp_dir
+
+            out = ask_output(source_path.stem)
+            if out == "BACK":
+                return
+            name, out_dir = out
+
+            extract_mcpack(source_path, out_dir / name)
+            print(f"[+] Extracted to {out_dir / name}")
+
         else:
-            if not detect_encrypted(source_path):
-                print("  Detected: not encrypted, just extracting")
+            if not (source_path / "manifest.json").exists():
+                print("[-] Not a skin pack (no manifest.json)")
+                input("\nPress Enter to continue...")
+                continue
+
+            encrypted = detect_encrypted(source_path)
+
+            if encrypted:
+                print("  Detected: encrypted folder")
+                print("\nAction:")
+                print("  [1] Decrypt")
+                print("  [2] Convert to .mcpack")
+                action = get_input("Select", "1")
+                if action == "BACK":
+                    return
+
                 out = ask_output(source_path.name)
                 if out == "BACK":
-                    if is_mcpack:
-                        shutil.rmtree(temp_dir)
                     return
                 name, out_dir = out
-                # Copy as-is (not encrypted, not converting)
-                shutil.copytree(source_path, out_dir / name, dirs_exist_ok=True)
-                print(f"[+] Copied to {out_dir / name}")
-                input("\nPress Enter to continue...")
-                return
-            print("  Detected: encrypted folder")
 
-        print("\nOutput format:")
-        print("  [1] Folder")
-        print("  [2] .mcpack")
-        fmt = get_input("Select", "1")
-        if fmt == "BACK":
-            if is_mcpack:
-                shutil.rmtree(temp_dir)
-            return
+                if action == "1":
+                    decrypt_pack(source_path, out_dir / name)
+                    print(f"[+] Decrypted to {out_dir / name}")
+                else:
+                    pack_to_mcpack_raw(source_path, out_dir, name)
+                    print(f"[+] Converted to {out_dir / name}.mcpack")
 
-        out = ask_output(source_path.stem if is_mcpack else source_path.name)
-        if out == "BACK":
-            if is_mcpack:
-                shutil.rmtree(temp_dir)
-            return
-        name, out_dir = out
+            else:
+                print("  Detected: unencrypted folder")
+                print("\nAction:")
+                print("  [1] Encrypt")
+                print("  [2] Convert to .mcpack")
+                action = get_input("Select", "1")
+                if action == "BACK":
+                    return
 
-        if fmt == "2":
-            decrypt_pack(source_path, out_dir / "temp_dec")
-            pack_to_mcpack_raw(out_dir / "temp_dec", out_dir, name)
-            shutil.rmtree(out_dir / "temp_dec")
-        else:
-            decrypt_pack(source_path, out_dir / name)
+                out = ask_output(source_path.name)
+                if out == "BACK":
+                    return
+                name, out_dir = out
 
-        if is_mcpack:
-            shutil.rmtree(temp_dir)
+                if action == "1":
+                    encrypt_to_folder(source_path, out_dir / name)
+                    print(f"[+] Encrypted to {out_dir / name}")
+                else:
+                    pack_to_mcpack_raw(source_path, out_dir, name)
+                    print(f"[+] Converted to {out_dir / name}.mcpack")
 
         input("\nPress Enter to continue...")
         return
@@ -381,8 +330,8 @@ def cmd_info():
     print()
     print("  Extract owned packs to edit their contents")
     print()
-    print("  Encrypt/decrypt packs to .mcpack or folder")
-    print("    for sharing or editing")
+    print("  Encrypt, decrypt, or convert packs")
+    print("    to .mcpack or folder format")
     print()
     print("  Requires: Minecraft Bedrock GDK version")
     print("  Cache: premium_cache/skin_packs")
@@ -414,11 +363,10 @@ def main():
         print("  [3] Remove owned pack      Delete a pack from premium_cache")
         print("\nExtract")
         print("  [4] Extract pack           Decrypt an owned pack to a folder")
-        print("\nEncrypt / Decrypt")
-        print("  [5] Encrypt folder         Lock a skin pack → encrypted folder or .mcpack")
-        print("  [6] Decrypt pack           Unlock an encrypted folder or .mcpack → open format")
-        print("\n  [7] Info")
-        print("  [8] Exit")
+        print("\nConvert")
+        print("  [5] Convert pack           Encrypt, decrypt, or convert any skin pack")
+        print("\n  [6] Info")
+        print("  [7] Exit")
 
         choice = get_input("Select option", "1")
 
@@ -431,12 +379,10 @@ def main():
         elif choice == "4":
             cmd_extract()
         elif choice == "5":
-            cmd_encrypt()
+            cmd_convert()
         elif choice == "6":
-            cmd_decrypt()
-        elif choice == "7":
             cmd_info()
-        elif choice == "8" or choice.lower() in ("exit", "quit", "q"):
+        elif choice == "7" or choice.lower() in ("exit", "quit", "q"):
             clear_screen()
             print("Goodbye!")
             break
