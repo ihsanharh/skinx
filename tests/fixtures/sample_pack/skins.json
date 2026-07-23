@@ -1,0 +1,18 @@
+{
+    "skins": [
+        {
+            "localization_name": "MySkin",
+            "geometry": "geometry.humanoid.custom",
+            "texture": "skin.png",
+            "type": "free"
+        },
+        {
+            "localization_name": "MySkin2",
+            "geometry": "geometry.humanoid.custom",
+            "texture": "skin.png",
+            "type": "free"
+        }
+    ],
+    "serialize_name": "skins",
+    "localization_name": "skins"
+}

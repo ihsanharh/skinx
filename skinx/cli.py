@@ -1,0 +1,444 @@
+"""Interactive CLI for skinx."""
+
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+
+from .cache import find_premium_cache, list_packs
+from .pack import (
+    decrypt_pack,
+    detect_encrypted,
+    encrypt_pack,
+    encrypt_to_folder,
+    extract_mcpack,
+    import_pack,
+    pack_to_mcpack_raw,
+    read_manifest,
+    validate_skinpack,
+)
+
+
+def clear_screen():
+    subprocess.run("cls" if os.name == "nt" else "clear", shell=True, check=False)
+
+
+def get_input(prompt, default=None, allow_back=True):
+    while True:
+        if default:
+            user_input = input(f"{prompt} [{default}]: ").strip()
+        else:
+            user_input = input(f"{prompt}: ").strip()
+        if allow_back and user_input.lower() in ("b", "back", "menu"):
+            return "BACK"
+        if user_input:
+            return user_input
+        if default:
+            return default
+        print("[-] Input required")
+
+
+def confirm_input(prompt, default=False):
+    while True:
+        user_input = input(f"{prompt} (y/N): ").strip().lower()
+        if user_input in ("y", "yes"):
+            return True
+        if user_input in ("n", "no", ""):
+            return default
+        if user_input.lower() in ("b", "back", "menu"):
+            return "BACK"
+
+
+def pick_pack(packs, prompt="Select pack"):
+    """Show pack list and return (index, pack_dir, pack_name) or None."""
+    print()
+    for i, (_path, name) in enumerate(packs):
+        print(f"  [{i}] {name}")
+    idx = get_input(prompt + " (or 'b' to go back)", allow_back=True)
+    if idx == "BACK":
+        return None
+    try:
+        idx = int(idx)
+        if 0 <= idx < len(packs):
+            return idx, packs[idx][0], packs[idx][1]
+    except ValueError:
+        pass
+    print("[-] Invalid index")
+    return None
+
+
+def ask_output(default_name, default_dir=None):
+    """Ask for output name and directory. Returns (name, dir) or 'BACK'."""
+    if not default_dir:
+        default_dir = str(Path.cwd())
+    name = get_input("Output name", default_name)
+    if name == "BACK":
+        return "BACK"
+    out_dir = get_input("Output directory", default_dir)
+    if out_dir == "BACK":
+        return "BACK"
+    return name, Path(out_dir)
+
+
+# ── commands ─────────────────────────────────────────────────────────
+
+
+def cmd_import():
+    while True:
+        clear_screen()
+        print("=== Import Custom Skins ===")
+        print("Replace skins in an owned marketplace pack.")
+        print("You must own the target pack first.")
+        print("[B]ack to menu\n")
+
+        source = get_input("Skin pack folder path", allow_back=True)
+        if source == "BACK":
+            return
+
+        source_path = Path(source).resolve()
+        if not source_path.exists():
+            print(f"[-] Path not found: {source}")
+            input("\nPress Enter to continue...")
+            continue
+
+        if not validate_skinpack(source_path):
+            input("\nPress Enter to continue...")
+            continue
+
+        cache = find_premium_cache()
+        packs = list_packs(cache)
+
+        if not packs:
+            print("[-] No skin packs found in cache")
+            input("\nPress Enter to continue...")
+            return
+
+        print("\nAvailable premium packs:")
+        result = pick_pack(packs, "Replace which pack?")
+        if result is None:
+            continue
+        idx, pack_dir, pack_name = result
+
+        import_pack(source_path, idx)
+        input("\nPress Enter to continue...")
+        return
+
+
+def cmd_remove():
+    clear_screen()
+    print("=== Remove Owned Pack ===")
+    print("Delete a pack from premium_cache.")
+    print("You must own the pack first.")
+    print("[B]ack to menu\n")
+
+    cache = find_premium_cache()
+    packs = list_packs(cache)
+
+    if not packs:
+        print("[-] No skin packs found")
+        input("\nPress Enter to continue...")
+        return
+
+    result = pick_pack(packs, "Remove which pack?")
+    if result is None:
+        return
+    idx, pack_dir, pack_name = result
+
+    confirm = confirm_input(f"Remove '{pack_name}'?", default=False)
+    if confirm == "BACK":
+        return
+    if confirm:
+        for item in pack_dir.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        print(f"[+] Removed: {pack_name}")
+    else:
+        print("[-] Cancelled")
+    input("\nPress Enter to continue...")
+
+
+def cmd_list_packs():
+    clear_screen()
+    print("=== Owned Marketplace Packs ===")
+    print("Packs in premium_cache (must own them).")
+    print("[B]ack to menu\n")
+
+    try:
+        cache = find_premium_cache()
+    except FileNotFoundError as e:
+        print(f"[-] {e}")
+        input("\nPress Enter to continue...")
+        return
+
+    packs = list_packs(cache)
+    if not packs:
+        print("[-] No skin packs found in premium_cache")
+        input("\nPress Enter to continue...")
+        return
+
+    print(f"Found {len(packs)} pack(s) in:\n  {cache}\n")
+    print(f"{'#':<4} {'Name':<30} {'UUID':<38} {'Dir'}")
+    print("-" * 95)
+    for i, (path, name) in enumerate(packs):
+        try:
+            manifest = read_manifest(path / "manifest.json")
+            uuid = manifest.get("header", {}).get("uuid", "unknown")
+            version = manifest.get("header", {}).get("version", "")
+            ver_str = ".".join(str(v) for v in version) if version else ""
+            display = f"{name} v{ver_str}" if ver_str else name
+        except Exception:
+            uuid = "unknown"
+            display = name
+        print(f"[{i}]  {display:<30} {uuid:<38} {path.name}")
+
+    input("\nPress Enter to continue...")
+
+
+def cmd_extract():
+    clear_screen()
+    print("=== Extract Pack ===")
+    print("Decrypt an owned marketplace pack to a folder.")
+    print("You must own the pack first.")
+    print("[B]ack to menu\n")
+
+    try:
+        cache = find_premium_cache()
+    except FileNotFoundError as e:
+        print(f"[-] {e}")
+        input("\nPress Enter to continue...")
+        return
+
+    packs = list_packs(cache)
+    if not packs:
+        print("[-] No skin packs found")
+        input("\nPress Enter to continue...")
+        return
+
+    result = pick_pack(packs, "Extract which pack?")
+    if result is None:
+        return
+    idx, pack_dir, pack_name = result
+
+    out = ask_output(pack_dir.name)
+    if out == "BACK":
+        return
+    name, out_dir = out
+
+    decrypt_pack(pack_dir, out_dir / name)
+    input("\nPress Enter to continue...")
+
+
+def cmd_encrypt():
+    while True:
+        clear_screen()
+        print("=== Encrypt ===")
+        print("Lock a skin pack folder.")
+        print("Output: encrypted folder or .mcpack")
+        print("[B]ack to menu\n")
+
+        source = get_input("Skin pack folder path", allow_back=True)
+        if source == "BACK":
+            return
+
+        source_path = Path(source).resolve()
+        if not source_path.exists():
+            print(f"[-] Path not found: {source}")
+            input("\nPress Enter to continue...")
+            continue
+        if not (source_path / "manifest.json").exists():
+            print("[-] Not a skin pack (no manifest.json)")
+            input("\nPress Enter to continue...")
+            continue
+
+        encrypted = detect_encrypted(source_path)
+        if encrypted:
+            print("  Detected: encrypted folder")
+        else:
+            print("  Detected: unencrypted folder")
+
+        print("\nOutput format:")
+        print("  [1] Folder")
+        print("  [2] .mcpack")
+        fmt = get_input("Select", "1")
+        if fmt == "BACK":
+            return
+
+        if fmt == "2":
+            if not encrypted:
+                enc = confirm_input("Encrypt the .mcpack?", default=True)
+                if enc == "BACK":
+                    return
+            else:
+                enc = True
+        else:
+            enc = True
+
+        out = ask_output(source_path.name)
+        if out == "BACK":
+            return
+        name, out_dir = out
+
+        if fmt == "2":
+            if enc:
+                encrypt_pack(source_path, out_dir)
+            else:
+                pack_to_mcpack_raw(source_path, out_dir, name)
+        else:
+            encrypt_to_folder(source_path, out_dir / name)
+
+        input("\nPress Enter to continue...")
+        return
+
+
+def cmd_decrypt():
+    while True:
+        clear_screen()
+        print("=== Decrypt ===")
+        print("Unlock an encrypted pack.")
+        print("Input: encrypted folder or .mcpack")
+        print("Output: open folder or .mcpack")
+        print("[B]ack to menu\n")
+
+        source = get_input("Encrypted pack path (folder or .mcpack)", allow_back=True)
+        if source == "BACK":
+            return
+
+        source_path = Path(source).resolve()
+        if not source_path.exists():
+            print(f"[-] Path not found: {source}")
+            input("\nPress Enter to continue...")
+            continue
+
+        is_mcpack = source_path.suffix == ".mcpack"
+
+        if is_mcpack:
+            print("  Detected: .mcpack file")
+            temp_dir = Path(tempfile.mkdtemp())
+            extract_mcpack(source_path, temp_dir)
+            source_path = temp_dir
+        else:
+            if not detect_encrypted(source_path):
+                print("  Detected: not encrypted, just extracting")
+                out = ask_output(source_path.name)
+                if out == "BACK":
+                    if is_mcpack:
+                        shutil.rmtree(temp_dir)
+                    return
+                name, out_dir = out
+                # Copy as-is (not encrypted, not converting)
+                shutil.copytree(source_path, out_dir / name, dirs_exist_ok=True)
+                print(f"[+] Copied to {out_dir / name}")
+                input("\nPress Enter to continue...")
+                return
+            print("  Detected: encrypted folder")
+
+        print("\nOutput format:")
+        print("  [1] Folder")
+        print("  [2] .mcpack")
+        fmt = get_input("Select", "1")
+        if fmt == "BACK":
+            if is_mcpack:
+                shutil.rmtree(temp_dir)
+            return
+
+        out = ask_output(source_path.stem if is_mcpack else source_path.name)
+        if out == "BACK":
+            if is_mcpack:
+                shutil.rmtree(temp_dir)
+            return
+        name, out_dir = out
+
+        if fmt == "2":
+            decrypt_pack(source_path, out_dir / "temp_dec")
+            pack_to_mcpack_raw(out_dir / "temp_dec", out_dir, name)
+            shutil.rmtree(out_dir / "temp_dec")
+        else:
+            decrypt_pack(source_path, out_dir / name)
+
+        if is_mcpack:
+            shutil.rmtree(temp_dir)
+
+        input("\nPress Enter to continue...")
+        return
+
+
+def cmd_info():
+    clear_screen()
+    print("\n" + "=" * 50)
+    print("skinx - Minecraft Bedrock Skin Pack Tool")
+    print("Version: 1.0")
+    print("Author: ihsanharh.com")
+    print("Encryption format reverse-engineered by")
+    print("  BedrockReverse/McTools")
+    print("=" * 50)
+    print("\nManage Minecraft Bedrock GDK skin packs:")
+    print()
+    print("  Replace skins in owned marketplace packs")
+    print("    with custom skins (supports custom geometry)")
+    print()
+    print("  Extract owned packs to edit their contents")
+    print()
+    print("  Encrypt/decrypt packs to .mcpack or folder")
+    print("    for sharing or editing")
+    print()
+    print("  Requires: Minecraft Bedrock GDK version")
+    print("  Cache: premium_cache/skin_packs")
+    input("\nPress Enter to return to menu...")
+
+
+# ── main loop ────────────────────────────────────────────────────────
+
+
+def main():
+    clear_screen()
+
+    try:
+        cache = find_premium_cache()
+        print(f"[+] Found premium_cache: {cache}")
+    except FileNotFoundError as e:
+        print(f"[-] {e}")
+        print("  Make sure Minecraft Bedrock is installed")
+        return
+
+    while True:
+        clear_screen()
+        print("=" * 50)
+        print("      skinx - Minecraft Bedrock Skin Pack Tool")
+        print("=" * 50)
+        print("\nMarketplace")
+        print("  [1] Import custom skins    Replace skins in an owned marketplace pack")
+        print("  [2] List owned packs       Show packs in premium_cache")
+        print("  [3] Remove owned pack      Delete a pack from premium_cache")
+        print("\nExtract")
+        print("  [4] Extract pack           Decrypt an owned pack to a folder")
+        print("\nEncrypt / Decrypt")
+        print("  [5] Encrypt folder         Lock a skin pack → encrypted folder or .mcpack")
+        print("  [6] Decrypt pack           Unlock an encrypted folder or .mcpack → open format")
+        print("\n  [7] Info")
+        print("  [8] Exit")
+
+        choice = get_input("Select option", "1")
+
+        if choice == "1":
+            cmd_import()
+        elif choice == "2":
+            cmd_list_packs()
+        elif choice == "3":
+            cmd_remove()
+        elif choice == "4":
+            cmd_extract()
+        elif choice == "5":
+            cmd_encrypt()
+        elif choice == "6":
+            cmd_decrypt()
+        elif choice == "7":
+            cmd_info()
+        elif choice == "8" or choice.lower() in ("exit", "quit", "q"):
+            clear_screen()
+            print("Goodbye!")
+            break
+        else:
+            print("[-] Invalid option")
