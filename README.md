@@ -18,47 +18,33 @@ Supports Windows and Linux ([BedrockOnLinux](https://github.com/Wyze3306/Bedrock
 
 ## Install
 
+### Download
+
+Download the latest binary from [Releases](https://github.com/ihsanharh/skinx/releases):
+
+- `skinx` — Linux
+- `skinx.exe` — Windows
+
+### Build from source
+
+Requires [Go 1.22+](https://go.dev/doc/install).
+
 ```bash
 git clone https://github.com/ihsanharh/skinx.git
 cd skinx
-pip install -e .
+go build -o skinx ./cmd/skinx/
 ```
-
-Requires Python 3.10+ and `cryptography>=49.0`.
 
 ## Usage
 
 ```bash
-skinx           # interactive CLI
-python -m skinx # same thing
+./skinx              # interactive CLI
+./skinx -m <path>    # custom Minecraft Bedrock directory
 ```
 
-### As a library
+### Windows
 
-```python
-from skinx import (
-    encrypt_to_folder, encrypt_pack, decrypt_pack,
-    import_pack, detect_encrypted, detect_path_type, pack_to_mcpack_raw,
-)
-
-# Detect what a path is
-detect_path_type(path)  # "mcpack" | "encrypted_folder" | "unencrypted_folder" | "unknown"
-
-# Decrypt a pack from premium_cache
-decrypt_pack(cache_pack_path, Path("output_decrypted"))
-
-# Encrypt a pack folder (creates .mcpack)
-encrypt_pack(decrypted_path, Path("output"))
-
-# Pack folder as .mcpack without encryption (for sharing)
-pack_to_mcpack_raw(source_folder, Path("output"), "my_pack")
-
-# Check if a folder is encrypted
-detect_encrypted(pack_folder)  # True/False
-
-# Import into Minecraft premium_cache
-import_pack(source_folder, pack_index)
-```
+Double-click `skinx.exe` to launch. The terminal window closes automatically when you exit.
 
 ## Cache locations
 
@@ -72,11 +58,27 @@ The tool auto-discovers `premium_cache/skin_packs` from:
 If auto-discovery doesn't work, pass your Minecraft Bedrock directory directly:
 
 ```bash
-skinx -m ~/path/to/Minecraft Bedrock
-skinx --minecraft-dir ~/path/to/Minecraft Bedrock
+./skinx -m ~/path/to/Minecraft Bedrock
+./skinx --minecraft-dir ~/path/to/Minecraft Bedrock
 ```
 
 > The `bedrock-on-linux` path is from the [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux) launcher which runs Minecraft Bedrock via Wine on Linux.
+
+## Development
+
+```bash
+# Run tests
+go test ./... -v
+
+# Build for current platform
+go build -o skinx ./cmd/skinx/
+
+# Cross-compile for Windows
+GOOS=windows GOARCH=amd64 go build -o skinx.exe ./cmd/skinx/
+
+# Build optimized binaries
+go build -ldflags="-s -w" -o skinx ./cmd/skinx/
+```
 
 ## Credits
 

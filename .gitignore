@@ -1,3 +1,18 @@
+# Build output
+skinx
+skinx-bin
+skinx-linux
+skinx.exe
+
+# Go
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Python (legacy)
 __pycache__/
 *.pyc
 *.pyo
@@ -7,3 +22,13 @@ build/
 .eggs/
 .pytest_cache/
 *.mcpack
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
