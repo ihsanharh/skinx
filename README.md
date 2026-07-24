@@ -1,6 +1,6 @@
 # skinx
 
-Minecraft Bedrock (GDK) skin pack tool. Encrypt, decrypt, import and manage skin packs in `premium_cache`.
+Minecraft Bedrock (GDK) skin pack tool. Encrypt, decrypt, convert and manage skin packs in `premium_cache`.
 
 Supports Windows and Linux ([BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux)).
 
@@ -9,12 +9,8 @@ Supports Windows and Linux ([BedrockOnLinux](https://github.com/Wyze3306/Bedrock
 ## Features
 
 - **Import** custom skins into owned marketplace packs (supports custom geometry, models, animations)
-- **List** owned packs in premium_cache
-- **Remove** owned packs from premium_cache
 - **Extract** (decrypt) owned packs to edit their contents
-- **Encrypt** skin packs to encrypted folder or `.mcpack` (for sharing)
-- **Decrypt** encrypted folders or `.mcpacks` to open format (for editing)
-- **Convert** between folder and `.mcpack` formats (with or without encryption)
+- **Convert** any skin pack — encrypt, decrypt, or convert between folder and `.mcpack` formats
 
 > **Note:** You must own the marketplace packs first. This tool is for personal use with packs you have purchased.
 
@@ -42,8 +38,11 @@ python -m skinx # same thing
 ```python
 from skinx import (
     encrypt_to_folder, encrypt_pack, decrypt_pack,
-    import_pack, detect_encrypted, pack_to_mcpack_raw, extract_mcpack,
+    import_pack, detect_encrypted, detect_path_type, pack_to_mcpack_raw,
 )
+
+# Detect what a path is
+detect_path_type(path)  # "mcpack" | "encrypted_folder" | "unencrypted_folder" | "unknown"
 
 # Decrypt a pack from premium_cache
 decrypt_pack(cache_pack_path, Path("output_decrypted"))
@@ -53,9 +52,6 @@ encrypt_pack(decrypted_path, Path("output"))
 
 # Pack folder as .mcpack without encryption (for sharing)
 pack_to_mcpack_raw(source_folder, Path("output"), "my_pack")
-
-# Extract a .mcpack without decryption
-extract_mcpack(mcpack_path, Path("output_folder"))
 
 # Check if a folder is encrypted
 detect_encrypted(pack_folder)  # True/False

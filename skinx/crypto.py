@@ -37,24 +37,31 @@ def read_encrypted_header(filepath: Path):
 
 def write_encrypted_header(filepath: Path, uuid: str, plaintext: bytes, key: bytes):
     """Write a file with the 256-byte header format."""
+    data = write_encrypted_header_bytes(uuid, plaintext, key)
+    with open(filepath, "wb") as f:
+        f.write(data)
+
+
+def write_encrypted_header_bytes(uuid: str, plaintext: bytes, key: bytes) -> bytes:
+    """Return the 256-byte header format as bytes (no file I/O)."""
     iv = key[:16]
     uuid_bytes = uuid.encode("utf-8")
     ciphertext = cfb8_encrypt(key, iv, plaintext)
 
-    with open(filepath, "wb") as f:
-        # Header: version(4) + magic(4) + reserved(8) + uuid_len(1) + uuid + zero-pad
-        f.write(struct.pack("<IIQ", 0, MAGIC, 0))
-        f.write(bytes([len(uuid_bytes)]))
-        f.write(uuid_bytes)
-        current = f.tell()
-        if current < HEADER_SIZE:
-            f.write(b"\x00" * (HEADER_SIZE - current))
-        f.write(ciphertext)
+    header = bytearray()
+    header += struct.pack("<IIQ", 0, MAGIC, 0)
+    header += bytes([len(uuid_bytes)])
+    header += uuid_bytes
+    if len(header) < HEADER_SIZE:
+        header += b"\x00" * (HEADER_SIZE - len(header))
+    header += ciphertext
+    return bytes(header)
 
 
-def cfb8_decrypt_file(filepath: Path, file_key: bytes = None) -> bytes:
+def cfb8_decrypt_file(filepath: Path, file_key: bytes = None, data: bytes = None) -> bytes:
     """Decrypt a file, auto-detecting the header format."""
-    data = filepath.read_bytes()
+    if data is None:
+        data = filepath.read_bytes()
     if len(data) >= 8 and int.from_bytes(data[4:8], "little") == MAGIC:
         ciphertext = data[HEADER_SIZE:]
         key = file_key or SKINPACK_KEY

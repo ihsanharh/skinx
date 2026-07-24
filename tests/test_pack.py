@@ -10,7 +10,6 @@ from skinx import (
     detect_encrypted,
     encrypt_pack,
     encrypt_to_folder,
-    extract_mcpack,
     pack_to_mcpack_raw,
     read_manifest,
 )
@@ -118,5 +117,7 @@ class TestExtractMcpack:
         mcpack = pack_to_mcpack_raw(decrypted_pack, mcpack_dir, "test")
 
         out = tmp_path / "extracted"
-        extract_mcpack(mcpack, out)
+        out.mkdir()
+        with zipfile.ZipFile(mcpack) as zf:
+            zf.extractall(out)
         assert (out / "skin.png").read_bytes() == (decrypted_pack / "skin.png").read_bytes()

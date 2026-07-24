@@ -19,6 +19,7 @@ from .crypto import (
     cfb8_encrypt,
     read_encrypted_header,
     write_encrypted_header,
+    write_encrypted_header_bytes,
 )
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -68,6 +69,15 @@ def detect_encrypted(pack_dir: Path) -> bool:
         return False
 
 
+def detect_path_type(path: Path) -> str:
+    """Detect input type: ``'mcpack'``, ``'encrypted_folder'``, or ``'unencrypted_folder'``."""
+    if path.suffix == ".mcpack":
+        return "mcpack"
+    if path.is_dir() and (path / "manifest.json").exists():
+        return "encrypted_folder" if detect_encrypted(path) else "unencrypted_folder"
+    return "unknown"
+
+
 def read_manifest(path: Path) -> dict:
     with open(path) as f:
         return json.load(f)
@@ -95,42 +105,52 @@ def encrypt_entries(
     contents: dict,
     skip_files: set = None,
     skip_paths: set = None,
+    zip_obj=None,
 ):
     """Core encrypt/copy loop shared by ``encrypt_pack``, ``encrypt_to_folder``
-    and ``import_pack``."""
+    and ``import_pack``.
+
+    When *zip_obj* is a :class:`zipfile.ZipFile`, encrypted files are written
+    directly into the archive instead of to *dest_dir* on disk.
+    """
     skip_files = skip_files or set()
     skip_paths = skip_paths or set()
 
-    # Directories: just create and add entry (no encryption)
     for rel_str, src_path, is_dir in entries:
         if rel_str in skip_files:
             continue
 
         if is_dir:
-            dst = dest_dir / rel_str.rstrip("/")
-            dst.mkdir(parents=True, exist_ok=True)
+            if zip_obj is None:
+                dst = dest_dir / rel_str.rstrip("/")
+                dst.mkdir(parents=True, exist_ok=True)
             contents["content"].append({"path": rel_str})
             continue
 
         if rel_str in skip_paths:
             continue
 
-        # Files: copy plaintext if in DONT_ENCRYPT, else encrypt with random key
         data = src_path.read_bytes()
 
         if is_dont_encrypt(rel_str):
-            dst = dest_dir / rel_str
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(data)
+            if zip_obj is not None:
+                zip_obj.writestr(rel_str, data)
+            else:
+                dst = dest_dir / rel_str
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(data)
             contents["content"].append({"path": rel_str})
         else:
             key_str = generate_key()
             key = key_str.encode("utf-8")
             ciphertext = cfb8_encrypt(key, key[:16], data)
 
-            dst = dest_dir / rel_str
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(ciphertext)
+            if zip_obj is not None:
+                zip_obj.writestr(rel_str, ciphertext)
+            else:
+                dst = dest_dir / rel_str
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(ciphertext)
 
             contents["content"].append({"path": rel_str, "key": key_str})
 
@@ -138,65 +158,106 @@ def encrypt_entries(
 # ── decrypt ──────────────────────────────────────────────────────────
 
 
-def decrypt_pack(pack_dir: Path, output_dir: Path):
-    """Decrypt an entire encrypted skin pack."""
+def decrypt_pack(pack_dir: Path, output_dir: Path, zip_obj=None):
+    """Decrypt an entire encrypted skin pack.
+
+    If *zip_obj* is a :class:`zipfile.ZipFile`, decrypt from the in-memory
+    archive instead of reading from *pack_dir* on disk.
+    """
     print(f"[+] Decrypting: {pack_dir.name}")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pack_dir = pack_dir.resolve()
     output_dir = output_dir.resolve()
+    same_path = pack_dir == output_dir
 
-    contents_path = pack_dir / "contents.json"
-    if not contents_path.exists():
-        print("  [-] No contents.json")
-        return False
+    # Read and decrypt contents.json
+    if zip_obj:
+        ct = zip_obj.read("contents.json")
+    else:
+        contents_path = pack_dir / "contents.json"
+        if not contents_path.exists():
+            print("  [-] No contents.json")
+            return False
+        try:
+            _, ct = read_encrypted_header(contents_path)
+        except Exception as e:
+            print(f"  [-] Failed to read contents.json: {e}")
+            return False
 
     try:
-        _uuid, ciphertext = read_encrypted_header(contents_path)
-        contents_pt = cfb8_decrypt(SKINPACK_KEY, SKINPACK_IV, ciphertext)
+        contents_pt = cfb8_decrypt(SKINPACK_KEY, SKINPACK_IV, ct)
         contents = json.loads(contents_pt.decode("utf-8"))
         print(f"  [+] Decrypted contents.json ({len(contents.get('content', []))} files)")
     except Exception as e:
         print(f"  [-] Failed to decrypt contents.json: {e}")
         return False
 
-    # Build lookup: file path → encryption key from contents.json
     file_keys = {}
     for item in contents.get("content", []):
         key_str = item.get("key")
         if key_str:
             file_keys[item["path"]] = key_str.encode("utf-8")
 
-    # Skip output_dir to avoid decrypting our own output
-    for root, _dirs, files in os.walk(pack_dir):
-        if output_dir in Path(root).resolve().parents or output_dir == Path(root).resolve():
+    # Collect (rel_str, data) pairs
+    if zip_obj:
+        entries = []
+        for info in zip_obj.infolist():
+            if info.is_dir() or info.filename == "contents.json":
+                continue
+            entries.append((info.filename, zip_obj.read(info.filename)))
+    elif same_path:
+        entries = []
+        for root, _dirs, files in os.walk(pack_dir):
+            for fname in files:
+                src = Path(root) / fname
+                rel = src.relative_to(pack_dir).as_posix()
+                if rel == "contents.json":
+                    continue
+                entries.append((rel, src.read_bytes()))
+    else:
+        entries = []
+        for root, _dirs, files in os.walk(pack_dir):
+            for fname in files:
+                src = Path(root) / fname
+                rel = src.relative_to(pack_dir).as_posix()
+                if rel == "contents.json":
+                    continue
+                entries.append((rel, None))  # None = read from disk later
+
+    # Decrypt and write
+    for rel_str, data in entries:
+        dst = output_dir / rel_str
+
+        if is_dont_encrypt(rel_str):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if data is not None:
+                dst.write_bytes(data)
+            else:
+                shutil.copy2(pack_dir / rel_str, dst)
             continue
 
-        for fname in files:
-            src = Path(root) / fname
-            rel = src.relative_to(pack_dir)
-            rel_str = rel.as_posix()
-            dst = output_dir / rel
+        if rel_str not in file_keys:
+            print(f"  [-] No key for {rel_str}, copying as-is")
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if data is not None:
+                dst.write_bytes(data)
+            else:
+                shutil.copy2(pack_dir / rel_str, dst)
+            continue
 
-            if is_dont_encrypt(rel_str):
+        try:
+            if data is None:
+                data = (pack_dir / rel_str).read_bytes()
+            plaintext = cfb8_decrypt_file(rel_str, file_keys[rel_str], data=data)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(plaintext)
+            print(f"  [+] Decrypted: {rel_str}")
+        except Exception as e:
+            print(f"  [-] Failed to decrypt {rel_str}: {e}")
+            if data is not None:
                 dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                continue
-
-            if rel_str not in file_keys:
-                print(f"  [-] No key for {rel_str}, copying as-is")
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                continue
-
-            try:
-                plaintext = cfb8_decrypt_file(src, file_keys[rel_str])
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                dst.write_bytes(plaintext)
-                print(f"  [+] Decrypted: {rel_str}")
-            except Exception as e:
-                print(f"  [-] Failed to decrypt {rel_str}: {e}")
-                shutil.copy2(src, dst)
+                dst.write_bytes(data)
 
     (output_dir / "contents.json").write_text(json.dumps(contents, indent=2))
     print(f"  [+] Done: {output_dir}")
@@ -214,23 +275,18 @@ def encrypt_pack(source_dir: Path, output_dir: Path, pack_uuid: str = None):
     manifest = read_manifest(source_dir / "manifest.json")
     header_uuid, _ = get_uuids(manifest)
 
-    temp_dir = output_dir / f"temp_{pack_uuid}"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
     entries = collect_entries(source_dir)
     contents = {"version": 1, "content": []}
-    encrypt_entries(entries, temp_dir, contents, skip_files={"contents.json"})
-
-    write_contents_json(temp_dir / "contents.json", header_uuid, contents)
-    write_manifest(temp_dir / "manifest.json", manifest)
 
     output_path = output_dir / f"{pack_uuid}.mcpack"
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in temp_dir.rglob("*"):
-            if f.is_file():
-                zf.write(f, f.relative_to(temp_dir))
+        encrypt_entries(entries, output_dir, contents, skip_files={"contents.json", "manifest.json"}, zip_obj=zf)
 
-    shutil.rmtree(temp_dir)
+        plaintext = json.dumps(contents, separators=(",", ":")).encode("utf-8")
+        zf.writestr("contents.json", write_encrypted_header_bytes(header_uuid, plaintext, SKINPACK_KEY))
+
+        zf.writestr("manifest.json", json.dumps(manifest, separators=(",", ":")))
+
     print(f"[+] Created {output_path}")
     return output_path
 
@@ -268,15 +324,6 @@ def pack_to_mcpack_raw(source_dir: Path, output_dir: Path, name: str = None):
                 zf.write(f, f.relative_to(source_dir))
     print(f"[+] Created {output_path}")
     return output_path
-
-
-def extract_mcpack(mcpack_path: Path, output_dir: Path):
-    """Extract a .mcpack (ZIP) to a folder without decryption."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(mcpack_path, "r") as zf:
-        zf.extractall(output_dir)
-    print(f"[+] Extracted to {output_dir}")
-    return output_dir
 
 
 # ── import ───────────────────────────────────────────────────────────

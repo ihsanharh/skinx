@@ -3,15 +3,14 @@
 import os
 import shutil
 import subprocess
-import tempfile
+import zipfile
 from pathlib import Path
 
 from .cache import find_premium_cache, list_packs
 from .pack import (
     decrypt_pack,
-    detect_encrypted,
+    detect_path_type,
     encrypt_to_folder,
-    extract_mcpack,
     import_pack,
     pack_to_mcpack_raw,
     read_manifest,
@@ -117,7 +116,7 @@ def cmd_import():
         result = pick_pack(packs, "Replace which pack?")
         if result is None:
             continue
-        idx, pack_dir, pack_name = result
+        idx, _pack_dir, _pack_name = result
 
         import_pack(source_path, idx)
         input("\nPress Enter to continue...")
@@ -142,7 +141,7 @@ def cmd_remove():
     result = pick_pack(packs, "Remove which pack?")
     if result is None:
         return
-    idx, pack_dir, pack_name = result
+    _idx, pack_dir, pack_name = result
 
     confirm = confirm_input(f"Remove '{pack_name}'?", default=False)
     if confirm == "BACK":
@@ -219,7 +218,7 @@ def cmd_extract():
     result = pick_pack(packs, "Extract which pack?")
     if result is None:
         return
-    idx, pack_dir, pack_name = result
+    _idx, pack_dir, _pack_name = result
 
     out = ask_output(pack_dir.name)
     if out == "BACK":
@@ -247,9 +246,9 @@ def cmd_convert():
             input("\nPress Enter to continue...")
             continue
 
-        is_mcpack = source_path.suffix == ".mcpack"
+        path_type = detect_path_type(source_path)
 
-        if is_mcpack:
+        if path_type == "mcpack":
             print("  Detected: .mcpack file")
 
             out = ask_output(source_path.stem)
@@ -257,58 +256,56 @@ def cmd_convert():
                 return
             name, out_dir = out
 
-            extract_mcpack(source_path, out_dir / name)
+            with zipfile.ZipFile(source_path, "r") as zf:
+                zf.extractall(out_dir / name)
             print(f"[+] Extracted to {out_dir / name}")
 
-        else:
-            if not (source_path / "manifest.json").exists():
-                print("[-] Not a skin pack (no manifest.json)")
-                input("\nPress Enter to continue...")
-                continue
+        elif path_type == "encrypted_folder":
+            print("  Detected: encrypted folder")
+            print("\nAction:")
+            print("  [1] Decrypt")
+            print("  [2] Convert to .mcpack")
+            action = get_input("Select", "1")
+            if action == "BACK":
+                return
 
-            encrypted = detect_encrypted(source_path)
+            out = ask_output(source_path.name)
+            if out == "BACK":
+                return
+            name, out_dir = out
 
-            if encrypted:
-                print("  Detected: encrypted folder")
-                print("\nAction:")
-                print("  [1] Decrypt")
-                print("  [2] Convert to .mcpack")
-                action = get_input("Select", "1")
-                if action == "BACK":
-                    return
-
-                out = ask_output(source_path.name)
-                if out == "BACK":
-                    return
-                name, out_dir = out
-
-                if action == "1":
-                    decrypt_pack(source_path, out_dir / name)
-                    print(f"[+] Decrypted to {out_dir / name}")
-                else:
-                    pack_to_mcpack_raw(source_path, out_dir, name)
-                    print(f"[+] Converted to {out_dir / name}.mcpack")
-
+            if action == "1":
+                decrypt_pack(source_path, out_dir / name)
+                print(f"[+] Decrypted to {out_dir / name}")
             else:
-                print("  Detected: unencrypted folder")
-                print("\nAction:")
-                print("  [1] Encrypt")
-                print("  [2] Convert to .mcpack")
-                action = get_input("Select", "1")
-                if action == "BACK":
-                    return
+                pack_to_mcpack_raw(source_path, out_dir, name)
+                print(f"[+] Converted to {out_dir / name}.mcpack")
 
-                out = ask_output(source_path.name)
-                if out == "BACK":
-                    return
-                name, out_dir = out
+        elif path_type == "unencrypted_folder":
+            print("  Detected: unencrypted folder")
+            print("\nAction:")
+            print("  [1] Encrypt")
+            print("  [2] Convert to .mcpack")
+            action = get_input("Select", "1")
+            if action == "BACK":
+                return
 
-                if action == "1":
-                    encrypt_to_folder(source_path, out_dir / name)
-                    print(f"[+] Encrypted to {out_dir / name}")
-                else:
-                    pack_to_mcpack_raw(source_path, out_dir, name)
-                    print(f"[+] Converted to {out_dir / name}.mcpack")
+            out = ask_output(source_path.name)
+            if out == "BACK":
+                return
+            name, out_dir = out
+
+            if action == "1":
+                encrypt_to_folder(source_path, out_dir / name)
+                print(f"[+] Encrypted to {out_dir / name}")
+            else:
+                pack_to_mcpack_raw(source_path, out_dir, name)
+                print(f"[+] Converted to {out_dir / name}.mcpack")
+
+        else:
+            print("[-] Not a skin pack (no manifest.json)")
+            input("\nPress Enter to continue...")
+            continue
 
         input("\nPress Enter to continue...")
         return
