@@ -20,7 +20,7 @@ import (
 	"github.com/ihsanharh/skinx/internal/pack"
 )
 
-const version = "2.0.0"
+const version = "2.0.1"
 
 const (
 	colorReset  = "\033[0m"
