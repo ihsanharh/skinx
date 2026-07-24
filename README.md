@@ -1,20 +1,30 @@
-# skinx
+<div align="center">
 
-Minecraft Bedrock (GDK) skin pack tool. Encrypt, decrypt, convert and manage skin packs in `premium_cache`.
+<h1>skinx</h1>
+
+A command-line tool for Minecraft Bedrock Edition (GDK) that lets you replace marketplace skin packs with your own custom packs — including custom geometry, models, capes, and animations.
+
+**How it works:** Minecraft Bedrock stores purchased skin packs in an encrypted `premium_cache` directory. skinx decrypts these packs, replaces the skins with your own, and re-encrypts them so the game loads your custom content as if it were the original marketplace pack.
 
 Supports Windows and Linux ([BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux)).
 
-> Only supports the GDK version (Minecraft 1.21.120 and above).
+Works in multiplayer world and servers that allow custom geometry, such as The Hive.
+
+> **Note:** Only supports the GDK version (Minecraft 1.21.120 and above). You must own the marketplace packs first — this tool is for personal use with packs you have purchased.
+
+</div>
+
+---
 
 ## Features
 
-- **Import** custom skins into owned marketplace packs (supports custom geometry, models, animations)
-- **Extract** (decrypt) owned packs to edit their contents
-- **Convert** any skin pack — encrypt, decrypt, or convert between folder and `.mcpack` formats
+| Feature | Description |
+|---|---|
+| **Replace skins** | Replace skins in an owned marketplace pack with your custom pack |
+| **Extract pack** | Decrypt an owned pack to a folder for editing |
+| **Convert pack** | Encrypt, decrypt, or convert between folder and `.mcpack` formats |
 
-> **Note:** You must own the marketplace packs first. This tool is for personal use with packs you have purchased.
-
-> **Disclaimer:** This tool modifies Minecraft game files and may violate Mojang's Terms of Service. Use at your own risk.
+---
 
 ## Install
 
@@ -22,7 +32,7 @@ Supports Windows and Linux ([BedrockOnLinux](https://github.com/Wyze3306/Bedrock
 
 Download the latest binary from [Releases](https://github.com/ihsanharh/skinx/releases):
 
-- `skinx` — Linux
+- `skinx` — Linux (run `chmod +x skinx` after downloading)
 - `skinx.exe` — Windows
 
 ### Build from source
@@ -35,6 +45,8 @@ cd skinx
 go build -o skinx ./cmd/skinx/
 ```
 
+---
+
 ## Usage
 
 ```bash
@@ -45,6 +57,8 @@ go build -o skinx ./cmd/skinx/
 ### Windows
 
 Double-click `skinx.exe` to launch. The terminal window closes automatically when you exit.
+
+---
 
 ## Cache locations
 
@@ -62,23 +76,7 @@ If auto-discovery doesn't work, pass your Minecraft Bedrock directory directly:
 ./skinx --minecraft-dir ~/path/to/Minecraft Bedrock
 ```
 
-> The `bedrock-on-linux` path is from the [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux) launcher which runs Minecraft Bedrock via Wine on Linux.
-
-## Development
-
-```bash
-# Run tests
-go test ./... -v
-
-# Build for current platform
-go build -o skinx ./cmd/skinx/
-
-# Cross-compile for Windows
-GOOS=windows GOARCH=amd64 go build -o skinx.exe ./cmd/skinx/
-
-# Build optimized binaries
-go build -ldflags="-s -w" -o skinx ./cmd/skinx/
-```
+---
 
 ## Credits
 
