@@ -13,7 +13,7 @@ from .crypto import (
     MAGIC,
     cfb8_encrypt,
     cfb8_decrypt,
-    cfb8_decrypt_file,
+    cfb8_decrypt_data,
     read_encrypted_header,
     write_encrypted_header,
 )
@@ -40,7 +40,7 @@ __all__ = [
     "DONT_ENCRYPT",
     "cfb8_encrypt",
     "cfb8_decrypt",
-    "cfb8_decrypt_file",
+    "cfb8_decrypt_data",
     "read_encrypted_header",
     "write_encrypted_header",
     "decrypt_pack",

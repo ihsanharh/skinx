@@ -1,5 +1,6 @@
 """Interactive CLI for skinx."""
 
+import logging
 import os
 import shutil
 import subprocess
@@ -117,9 +118,9 @@ def cmd_import(minecraft_dir=None):
         result = pick_pack(packs, "Replace which pack?")
         if result is None:
             continue
-        idx, _pack_dir, _pack_name = result
+        _idx, pack_dir, _pack_name = result
 
-        import_pack(source_path, idx, minecraft_dir)
+        import_pack(source_path, pack_dir)
         input("\nPress Enter to continue...")
         return
 
@@ -341,6 +342,7 @@ def cmd_info():
 
 def main(minecraft_dir=None):
     clear_screen()
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     try:
         cache = find_premium_cache(minecraft_dir)

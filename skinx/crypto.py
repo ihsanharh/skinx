@@ -57,10 +57,13 @@ def write_encrypted_header_bytes(uuid: str, plaintext: bytes, key: bytes) -> byt
     return bytes(header)
 
 
-def cfb8_decrypt_file(filepath: Path, file_key: bytes = None, data: bytes = None) -> bytes:
-    """Decrypt a file, auto-detecting the header format."""
-    if data is None:
-        data = filepath.read_bytes()
+def cfb8_decrypt_data(data: bytes, file_key: bytes = None) -> bytes:
+    """Decrypt data, auto-detecting the Bedrock header format.
+
+    If *data* starts with the 256-byte header, the ciphertext after the
+    header is decrypted with *file_key* (or the global ``SKINPACK_KEY``).
+    Otherwise *file_key* is used directly on the raw data.
+    """
     if len(data) >= 8 and int.from_bytes(data[4:8], "little") == MAGIC:
         ciphertext = data[HEADER_SIZE:]
         key = file_key or SKINPACK_KEY

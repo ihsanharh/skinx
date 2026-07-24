@@ -1,6 +1,7 @@
 """Pack-level operations: encrypt, decrypt, import, and helpers."""
 
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -8,13 +9,12 @@ import uuid as uuid_lib
 import zipfile
 from pathlib import Path
 
-from .cache import find_premium_cache, list_packs
 from .crypto import (
     MAGIC,
     SKINPACK_IV,
     SKINPACK_KEY,
     cfb8_decrypt,
-    cfb8_decrypt_file,
+    cfb8_decrypt_data,
     cfb8_encrypt,
     read_encrypted_header,
     write_encrypted_header,
@@ -22,6 +22,8 @@ from .crypto import (
 )
 
 DONT_ENCRYPT = {"manifest.json", "contents.json", "texts", "pack_icon.png"}
+
+log = logging.getLogger(__name__)
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -165,7 +167,7 @@ def decrypt_pack(pack_dir: Path, output_dir: Path, zip_obj=None):
     If *zip_obj* is a :class:`zipfile.ZipFile`, decrypt from the in-memory
     archive instead of reading from *pack_dir* on disk.
     """
-    print(f"[+] Decrypting: {pack_dir.name}")
+    log.info("Decrypting: %s", pack_dir.name)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     pack_dir = pack_dir.resolve()
@@ -178,20 +180,20 @@ def decrypt_pack(pack_dir: Path, output_dir: Path, zip_obj=None):
     else:
         contents_path = pack_dir / "contents.json"
         if not contents_path.exists():
-            print("  [-] No contents.json")
+            log.error("No contents.json")
             return False
         try:
             _, ct = read_encrypted_header(contents_path)
         except Exception as e:
-            print(f"  [-] Failed to read contents.json: {e}")
+            log.error("Failed to read contents.json: %s", e)
             return False
 
     try:
         contents_pt = cfb8_decrypt(SKINPACK_KEY, SKINPACK_IV, ct)
         contents = json.loads(contents_pt.decode("utf-8"))
-        print(f"  [+] Decrypted contents.json ({len(contents.get('content', []))} files)")
+        log.info("Decrypted contents.json (%d files)", len(contents.get("content", [])))
     except Exception as e:
-        print(f"  [-] Failed to decrypt contents.json: {e}")
+        log.error("Failed to decrypt contents.json: %s", e)
         return False
 
     file_keys = {}
@@ -239,7 +241,7 @@ def decrypt_pack(pack_dir: Path, output_dir: Path, zip_obj=None):
             continue
 
         if rel_str not in file_keys:
-            print(f"  [-] No key for {rel_str}, copying as-is")
+            log.warning("No key for %s, copying as-is", rel_str)
             dst.parent.mkdir(parents=True, exist_ok=True)
             if data is not None:
                 dst.write_bytes(data)
@@ -250,18 +252,18 @@ def decrypt_pack(pack_dir: Path, output_dir: Path, zip_obj=None):
         try:
             if data is None:
                 data = (pack_dir / rel_str).read_bytes()
-            plaintext = cfb8_decrypt_file(rel_str, file_keys[rel_str], data=data)
+            plaintext = cfb8_decrypt_data(data, file_keys[rel_str])
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(plaintext)
-            print(f"  [+] Decrypted: {rel_str}")
+            log.info("Decrypted: %s", rel_str)
         except Exception as e:
-            print(f"  [-] Failed to decrypt {rel_str}: {e}")
+            log.error("Failed to decrypt %s: %s", rel_str, e)
             if data is not None:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_bytes(data)
 
     (output_dir / "contents.json").write_text(json.dumps(contents, indent=2))
-    print(f"  [+] Done: {output_dir}")
+    log.info("Done: %s", output_dir)
     return True
 
 
@@ -288,7 +290,7 @@ def encrypt_pack(source_dir: Path, output_dir: Path, pack_uuid: str = None):
 
         zf.writestr("manifest.json", json.dumps(manifest, separators=(",", ":")))
 
-    print(f"[+] Created {output_path}")
+    log.info("Created %s", output_path)
     return output_path
 
 
@@ -309,7 +311,7 @@ def encrypt_to_folder(source_dir: Path, output_dir: Path, pack_uuid: str = None)
     write_contents_json(output_dir / "contents.json", header_uuid, contents)
     write_manifest(output_dir / "manifest.json", manifest)
 
-    print(f"[+] Encrypted to folder: {output_dir}")
+    log.info("Encrypted to folder: %s", output_dir)
     return output_dir
 
 
@@ -323,7 +325,7 @@ def pack_to_mcpack_raw(source_dir: Path, output_dir: Path, name: str = None):
         for f in source_dir.rglob("*"):
             if f.is_file():
                 zf.write(f, f.relative_to(source_dir))
-    print(f"[+] Created {output_path}")
+    log.info("Created %s", output_path)
     return output_path
 
 
@@ -333,16 +335,16 @@ def pack_to_mcpack_raw(source_dir: Path, output_dir: Path, name: str = None):
 def validate_skinpack(source_dir: Path) -> bool:
     """Check whether *source_dir* looks like a valid skin pack."""
     if not source_dir.exists():
-        print("[-] Path not found")
+        log.warning("Path not found")
         return False
     if not (source_dir / "manifest.json").exists():
-        print("[-] Missing manifest.json")
+        log.warning("Missing manifest.json")
         return False
     if not (source_dir / "skins.json").exists():
-        print("[-] Missing skins.json")
+        log.warning("Missing skins.json")
         return False
     if not any(f.endswith(".png") for _, _, files in os.walk(source_dir) for f in files):
-        print("[-] No PNG textures found")
+        log.warning("No PNG textures found")
         return False
     return True
 
@@ -360,7 +362,7 @@ def _read_preserved_entries(contents_path: Path) -> list:
             if "signature" in path or path == "manifest.json" or path.startswith("texts/"):
                 preserved.append(entry)
     except Exception as e:
-        print(f"  [-] Warning: Failed to read preserved entries: {e}")
+        log.warning("Failed to read preserved entries: %s", e)
     return preserved
 
 
@@ -369,24 +371,20 @@ def _is_preserved(item_name: str) -> bool:
     return "signature" in name_lower or name_lower in ("manifest.json", "texts")
 
 
-def import_pack(source_dir: Path, target_idx: int, minecraft_dir=None):
-    """Replace the skins in an existing premium pack, preserving its identity."""
+def import_pack(source_dir: Path, target_pack: Path):
+    """Replace the skins in an existing premium pack, preserving its identity.
+
+    *target_pack* is the resolved path to the pack directory inside
+    ``premium_cache/skin_packs``.
+    """
     if not validate_skinpack(source_dir):
         return False
 
-    cache = find_premium_cache(minecraft_dir)
-    packs = list_packs(cache)
-
-    if target_idx < 0 or target_idx >= len(packs):
-        print(f"[-] Invalid pack index: {target_idx}")
-        return False
-
-    target_pack, target_name = packs[target_idx]
-    print(f"[+] Importing into: {target_name} ({target_pack.name})")
+    log.info("Importing into: %s", target_pack.name)
 
     target_manifest = read_manifest(target_pack / "manifest.json")
     target_header_uuid, _ = get_uuids(target_manifest)
-    print(f"  Target header UUID: {target_header_uuid} (preserving)")
+    log.info("Target header UUID: %s (preserving)", target_header_uuid)
 
     preserved_entries = _read_preserved_entries(target_pack / "contents.json")
 
@@ -404,14 +402,14 @@ def import_pack(source_dir: Path, target_idx: int, minecraft_dir=None):
             shutil.rmtree(item)
             continue
         if _is_preserved(item.name):
-            print(f"  [+] Preserved: {item.name}")
+            log.info("Preserved: %s", item.name)
             continue
         if item.is_dir():
             shutil.rmtree(item)
         else:
             item.unlink()
 
-    print("  [+] Encrypting source to target...")
+    log.info("Encrypting source to target...")
     entries = collect_entries(source_dir)
     contents = {"version": 1, "content": []}
     encrypt_entries(
@@ -434,5 +432,5 @@ def import_pack(source_dir: Path, target_idx: int, minecraft_dir=None):
     contents["content"].sort(key=lambda e: e["path"])
     write_contents_json(target_pack / "contents.json", target_header_uuid, contents)
 
-    print("[+] Import complete! Target UUIDs preserved.")
+    log.info("Import complete! Target UUIDs preserved.")
     return True
