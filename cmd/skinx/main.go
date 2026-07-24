@@ -271,10 +271,15 @@ func cmdListPacks(minecraftDir string) {
 	}
 
 	fmt.Printf("Found %d pack(s) in:\n  %s\n\n", len(packs), cacheDir)
-	fmt.Printf("%-4s %-30s %-38s %s\n", "#", "Name", "UUID", "Dir")
-	fmt.Println(strings.Repeat("-", 95))
 
-	for i, p := range packs {
+	type row struct {
+		display string
+		uuid    string
+		dir     string
+	}
+	var rows []row
+
+	for _, p := range packs {
 		manifest, err := pack.ReadManifest(filepath.Join(p.Dir, "manifest.json"))
 		uuid := "unknown"
 		display := p.Name
@@ -291,7 +296,30 @@ func cmdListPacks(minecraftDir string) {
 				display = fmt.Sprintf("%s v%s", p.Name, verStr)
 			}
 		}
-		fmt.Printf("[%d]  %-30s %-38s %s\n", i, display, uuid, filepath.Base(p.Dir))
+		rows = append(rows, row{display: display, uuid: uuid, dir: filepath.Base(p.Dir)})
+	}
+
+	maxName, maxUUID, maxDir := 4, 4, 3
+	for _, r := range rows {
+		if len(r.display) > maxName {
+			maxName = len(r.display)
+		}
+		if len(r.uuid) > maxUUID {
+			maxUUID = len(r.uuid)
+		}
+		if len(r.dir) > maxDir {
+			maxDir = len(r.dir)
+		}
+	}
+
+	prefixWidth := len(fmt.Sprintf("[%d]", len(rows)-1)) + 2
+
+	header := fmt.Sprintf("%-*s  %-*s  %-*s  %-*s", prefixWidth, "#", maxName, "Name", maxUUID, "UUID", maxDir, "Dir")
+	fmt.Println(header)
+	fmt.Println(strings.Repeat("-", len(header)))
+
+	for i, r := range rows {
+		fmt.Printf("%-*s  %-*s  %-*s  %-*s\n", prefixWidth, fmt.Sprintf("[%d]", i), maxName, r.display, maxUUID, r.uuid, maxDir, r.dir)
 	}
 
 	waitForEnter()
