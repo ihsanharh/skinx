@@ -10,7 +10,6 @@ from pathlib import Path
 
 from .cache import find_premium_cache, list_packs
 from .crypto import (
-    DONT_ENCRYPT,
     MAGIC,
     SKINPACK_IV,
     SKINPACK_KEY,
@@ -21,6 +20,8 @@ from .crypto import (
     write_encrypted_header,
     write_encrypted_header_bytes,
 )
+
+DONT_ENCRYPT = {"manifest.json", "contents.json", "texts", "pack_icon.png"}
 
 # ── helpers ──────────────────────────────────────────────────────────
 

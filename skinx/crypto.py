@@ -11,7 +11,6 @@ SKINPACK_KEY = b"s5s5ejuDru4uchuF2drUFuthaspAbepE"
 SKINPACK_IV = SKINPACK_KEY[:16]
 MAGIC = 0x9BCFB9FC  # File magic at bytes 4-7 of header
 HEADER_SIZE = 0x100  # 256-byte header before ciphertext
-DONT_ENCRYPT = {"manifest.json", "contents.json", "texts", "pack_icon.png"}
 
 
 def cfb8_encrypt(key: bytes, iv: bytes, data: bytes) -> bytes:

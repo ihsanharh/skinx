@@ -9,7 +9,6 @@ from .cache import find_premium_cache, list_packs
 from .crypto import (
     SKINPACK_KEY,
     MAGIC,
-    DONT_ENCRYPT,
     cfb8_encrypt,
     cfb8_decrypt,
     cfb8_decrypt_file,
@@ -17,6 +16,7 @@ from .crypto import (
     write_encrypted_header,
 )
 from .pack import (
+    DONT_ENCRYPT,
     decrypt_pack,
     detect_encrypted,
     detect_path_type,
