@@ -4,13 +4,20 @@ import os
 from pathlib import Path
 
 
-def find_premium_cache() -> Path:
+def find_premium_cache(minecraft_dir=None) -> Path:
     """Locate the premium_cache/skin_packs directory.
 
     Searches in order:
-    1. Native Windows (%APPDATA%)
-    2. BedrockOnLinux Wine prefix (https://github.com/Wyze3306/BedrockOnLinux)
+    1. *minecraft_dir* if provided (``<dir>/premium_cache/skin_packs``)
+    2. Native Windows (%APPDATA%)
+    3. BedrockOnLinux Wine prefix (https://github.com/Wyze3306/BedrockOnLinux)
     """
+    if minecraft_dir:
+        cache = Path(minecraft_dir) / "premium_cache/skin_packs"
+        if cache.exists():
+            return cache
+        raise FileNotFoundError(f"Not found: {cache}")
+
     appdata = os.environ.get("APPDATA")
     if appdata:
         cache = Path(appdata) / "Minecraft Bedrock/premium_cache/skin_packs"

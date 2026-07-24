@@ -69,6 +69,13 @@ The tool auto-discovers `premium_cache/skin_packs` from:
 | **Windows** | `%APPDATA%\Minecraft Bedrock\premium_cache\skin_packs` |
 | **Linux (Wine)** via [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux) | `~/.local/share/bedrock-on-linux/compatdata/pfx/drive_c/users/<user>/AppData/Roaming/Minecraft Bedrock/premium_cache/skin_packs` |
 
+If auto-discovery doesn't work, pass your Minecraft Bedrock directory directly:
+
+```bash
+skinx -m ~/path/to/Minecraft Bedrock
+skinx --minecraft-dir ~/path/to/Minecraft Bedrock
+```
+
 > The `bedrock-on-linux` path is from the [BedrockOnLinux](https://github.com/Wyze3306/BedrockOnLinux) launcher which runs Minecraft Bedrock via Wine on Linux.
 
 ## Credits

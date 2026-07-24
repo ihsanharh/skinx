@@ -368,12 +368,12 @@ def _is_preserved(item_name: str) -> bool:
     return "signature" in name_lower or name_lower in ("manifest.json", "texts")
 
 
-def import_pack(source_dir: Path, target_idx: int):
+def import_pack(source_dir: Path, target_idx: int, minecraft_dir=None):
     """Replace the skins in an existing premium pack, preserving its identity."""
     if not validate_skinpack(source_dir):
         return False
 
-    cache = find_premium_cache()
+    cache = find_premium_cache(minecraft_dir)
     packs = list_packs(cache)
 
     if target_idx < 0 or target_idx >= len(packs):

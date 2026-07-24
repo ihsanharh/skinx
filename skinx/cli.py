@@ -82,7 +82,7 @@ def ask_output(default_name, default_dir=None):
 # ── commands ─────────────────────────────────────────────────────────
 
 
-def cmd_import():
+def cmd_import(minecraft_dir=None):
     while True:
         clear_screen()
         print("=== Import Custom Skins ===")
@@ -104,7 +104,7 @@ def cmd_import():
             input("\nPress Enter to continue...")
             continue
 
-        cache = find_premium_cache()
+        cache = find_premium_cache(minecraft_dir)
         packs = list_packs(cache)
 
         if not packs:
@@ -118,19 +118,19 @@ def cmd_import():
             continue
         idx, _pack_dir, _pack_name = result
 
-        import_pack(source_path, idx)
+        import_pack(source_path, idx, minecraft_dir)
         input("\nPress Enter to continue...")
         return
 
 
-def cmd_remove():
+def cmd_remove(minecraft_dir=None):
     clear_screen()
     print("=== Remove Owned Pack ===")
     print("Delete a pack from premium_cache.")
     print("You must own the pack first.")
     print("[B]ack to menu\n")
 
-    cache = find_premium_cache()
+    cache = find_premium_cache(minecraft_dir)
     packs = list_packs(cache)
 
     if not packs:
@@ -158,14 +158,14 @@ def cmd_remove():
     input("\nPress Enter to continue...")
 
 
-def cmd_list_packs():
+def cmd_list_packs(minecraft_dir=None):
     clear_screen()
     print("=== Owned Marketplace Packs ===")
     print("Packs in premium_cache (must own them).")
     print("[B]ack to menu\n")
 
     try:
-        cache = find_premium_cache()
+        cache = find_premium_cache(minecraft_dir)
     except FileNotFoundError as e:
         print(f"[-] {e}")
         input("\nPress Enter to continue...")
@@ -195,7 +195,7 @@ def cmd_list_packs():
     input("\nPress Enter to continue...")
 
 
-def cmd_extract():
+def cmd_extract(minecraft_dir=None):
     clear_screen()
     print("=== Extract Pack ===")
     print("Decrypt an owned marketplace pack to a folder.")
@@ -203,7 +203,7 @@ def cmd_extract():
     print("[B]ack to menu\n")
 
     try:
-        cache = find_premium_cache()
+        cache = find_premium_cache(minecraft_dir)
     except FileNotFoundError as e:
         print(f"[-] {e}")
         input("\nPress Enter to continue...")
@@ -338,11 +338,11 @@ def cmd_info():
 # ── main loop ────────────────────────────────────────────────────────
 
 
-def main():
+def main(minecraft_dir=None):
     clear_screen()
 
     try:
-        cache = find_premium_cache()
+        cache = find_premium_cache(minecraft_dir)
         print(f"[+] Found premium_cache: {cache}")
     except FileNotFoundError as e:
         print(f"[-] {e}")
@@ -368,13 +368,13 @@ def main():
         choice = get_input("Select option", "1")
 
         if choice == "1":
-            cmd_import()
+            cmd_import(minecraft_dir)
         elif choice == "2":
-            cmd_list_packs()
+            cmd_list_packs(minecraft_dir)
         elif choice == "3":
-            cmd_remove()
+            cmd_remove(minecraft_dir)
         elif choice == "4":
-            cmd_extract()
+            cmd_extract(minecraft_dir)
         elif choice == "5":
             cmd_convert()
         elif choice == "6":
