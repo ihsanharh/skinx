@@ -5,6 +5,8 @@ Made by ihsanharh.com
 Encryption format reverse-engineered by BedrockReverse/McTools
 """
 
+from importlib.metadata import version as _get_version
+
 from .cache import find_premium_cache, list_packs
 from .crypto import (
     SKINPACK_KEY,
@@ -28,7 +30,7 @@ from .pack import (
     validate_skinpack,
 )
 
-__version__ = "1.0.0"
+__version__ = _get_version("skinx")
 
 __all__ = [
     "find_premium_cache",

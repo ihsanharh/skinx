@@ -6,6 +6,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+from . import __version__
 from .cache import find_premium_cache, list_packs
 from .pack import (
     decrypt_pack,
@@ -315,7 +316,7 @@ def cmd_info():
     clear_screen()
     print("\n" + "=" * 50)
     print("skinx - Minecraft Bedrock Skin Pack Tool")
-    print("Version: 1.0")
+    print(f"Version: {__version__}")
     print("Author: ihsanharh.com")
     print("Encryption format reverse-engineered by")
     print("  BedrockReverse/McTools")
