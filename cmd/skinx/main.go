@@ -20,7 +20,7 @@ import (
 	"github.com/ihsanharh/skinx/internal/pack"
 )
 
-const version = "2.0.1"
+const version = "2.0.2"
 
 const (
 	colorReset  = "\033[0m"
@@ -36,22 +36,24 @@ var stdin = bufio.NewReader(os.Stdin)
 var alternateScreen bool
 
 func enterAlternateScreen() {
+	// Disabled to allow terminal scrollback
 	if !alternateScreen {
-		fmt.Print("\033[?1049h")
+		// fmt.Print("\033[?1049h")
 		alternateScreen = true
 	}
 }
 
 func leaveAlternateScreen() {
 	if alternateScreen {
-		fmt.Print("\033[?1049l")
+		// fmt.Print("\033[?1049l")
 		alternateScreen = false
 	}
 }
 
 func clearScreen() {
 	enterAlternateScreen()
-	fmt.Print("\033[2J\033[H")
+	// Clear screen and scrollback using standard Linux clear sequence
+	fmt.Print("\033[H\033[2J\033[3J")
 }
 
 func getInput(prompt, defaultVal string) (string, bool) {
